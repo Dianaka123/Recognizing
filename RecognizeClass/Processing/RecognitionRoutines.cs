@@ -2,11 +2,41 @@
 using System;
 using System.Collections.Generic;
 using System.Drawing;
+using System.Linq;
 
 namespace RecognizeClass.Processing
 {
     public class RecognitionRoutines
     {
+        public static char? TryRecognizeClassDistance(Bitmap bitmap, IDictionary<char, IList<RecognitionInfo>> recognitionInfos, IList<Zond> zonds)
+        {
+            IDictionary<Zond, int> zondsCrossCount = GetCrossCount(bitmap, zonds);
+
+            double minDistance = double.MaxValue;
+            char? result = default;
+
+            foreach (KeyValuePair<char, IList<RecognitionInfo>> dictionaryPair in recognitionInfos)
+            {
+                IList<RecognitionInfo> infos = dictionaryPair.Value;
+                double squaredDistance = zonds.Sum(zond =>
+                {
+                    int crossCount = zondsCrossCount[zond];
+                    double average = infos.Average(info => info.ZondCrossDictionary[zond]);
+                    double diff = average - crossCount;
+                    return diff * diff;
+                });
+                double distance = Math.Sqrt(squaredDistance);
+                if (distance < minDistance)
+                {
+                    minDistance = distance;
+                    result = dictionaryPair.Key;
+                }
+            }
+
+            return result;
+        }
+
+
         public static char? TryRecognizeClass(Bitmap bitmap, IDictionary<char, IList<RecognitionInfo>> recognitionInfos, IEnumerable<Zond> zonds)
         {
             IDictionary<Zond, int> zondsCrossCount = GetCrossCount(bitmap, zonds);
@@ -41,7 +71,7 @@ namespace RecognizeClass.Processing
             };
         }
 
-        private static IDictionary<Zond, int> GetCrossCount(Bitmap bitmap, IEnumerable<Zond> zonds)
+        public static IDictionary<Zond, int> GetCrossCount(Bitmap bitmap, IEnumerable<Zond> zonds)
         {
             PointF ConvertToAbsolute(PointF point) => 
                 new PointF(point.X * (bitmap.Width - 1), point.Y * (bitmap.Height - 1));

@@ -9,22 +9,31 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using System.Windows.Forms.DataVisualization.Charting;
 
 namespace RecognizeClass
 {
     public partial class Form1 : Form
     {
-        private static readonly Zond[] Zonds = new Zond[] { 
-            new Zond { StartPoint = new PointF(0.2f, 0.2f), EndPoint = new PointF(0.2f, 0.9f) },
-            new Zond { StartPoint = new PointF(0.1f, 0.2f), EndPoint = new PointF(0.9f, 0.2f) }
+        private static readonly Zond[] Zonds = new[] {
+            new Zond { StartPoint = new PointF(0.5f, 0f), EndPoint = new PointF(0.5f, 1f) },
+            new Zond { StartPoint = new PointF(0.3f, 0.6f), EndPoint = new PointF(1f, 0.6f) }
+        };
+
+        private static readonly Color[] Colors = new Color[]
+        {
+            Color.Red,
+            Color.Green,
+            Color.Blue,
+            Color.Yellow,
+            Color.Aqua
         };
 
         private static readonly Dictionary<char, IList<RecognitionInfo>> RecognitionDictionary = 
             new Dictionary<char, IList<RecognitionInfo>>();
 
         public Form1()
-        {
-      
+        {    
             InitializeComponent();
         }
 
@@ -35,9 +44,65 @@ namespace RecognizeClass
                 using Bitmap openedBitmap = Bitmap.FromFile(ImageOpenFileDialog.FileName) as Bitmap;
                 RecognitionPictureBox.Image = DrawingRoutines.DrawZonds(openedBitmap, Zonds);
 
-                char? recognitionResult = RecognitionRoutines.TryRecognizeClass(openedBitmap, RecognitionDictionary, Zonds);
+                char? recognitionResult = RecognitionRoutines.TryRecognizeClassDistance(openedBitmap, RecognitionDictionary, Zonds);
                 RecognitionResultLabel.Text = recognitionResult.HasValue ? 
                     recognitionResult.Value.ToString() : string.Empty;
+
+                var crossCount = RecognitionRoutines.GetCrossCount(openedBitmap, Zonds);
+                UpdateChart(chart2, (crossCount[Zonds[0]], crossCount[Zonds[1]], recognitionResult.Value));
+            }
+        }
+
+        private void UpdateChart(Chart chart, (int x, int y, char resultClass)? additional = null)
+        {
+            chart.Series.Clear();
+
+            var classSeries = new Dictionary<char, (double x, double y)>();
+                
+            int index = 0;
+            foreach (KeyValuePair<char, IList<RecognitionInfo>> pair in RecognitionDictionary)
+            {
+                IList<RecognitionInfo> infos = pair.Value;
+
+                var x = infos.Average(info => info.ZondCrossDictionary[Zonds[0]]);
+                var y = infos.Average(info => info.ZondCrossDictionary[Zonds[1]]);
+
+                var series = new Series();
+                series.ChartType = SeriesChartType.Bubble;
+                series.MarkerSize = 8;
+                series.Points.AddXY(x, y);
+                series.LegendText = pair.Key.ToString();
+
+                chart.Series.Add(series);
+
+                classSeries.Add(pair.Key, (x, y));
+
+                index++;
+            }
+
+            if (additional.HasValue)
+            {
+                var value = additional.Value;
+
+                var markerSeries = new Series();
+                markerSeries.ChartType = SeriesChartType.Bubble;
+                markerSeries.MarkerSize = 25;
+                markerSeries.Points.AddXY(value.x, value.y);
+                markerSeries.Color = Color.Black;
+                markerSeries.LegendText = "New";
+                markerSeries.MarkerStyle = MarkerStyle.Star5;
+                chart.Series.Add(markerSeries);
+
+                var data = classSeries[value.resultClass];
+
+                var lineSeries = new Series();
+                lineSeries.ChartType = SeriesChartType.Line;
+                lineSeries.Points.AddXY(value.x, value.y);
+                lineSeries.Points.AddXY(data.x, data.y);
+                lineSeries.BorderWidth = 3;
+                lineSeries.LegendText = "line";
+                lineSeries.Color = Color.Black;
+                chart.Series.Add(lineSeries);
             }
         }
 
@@ -62,6 +127,8 @@ namespace RecognizeClass
                     RecognitionDictionary.Add(className, new List<RecognitionInfo> { recognitionInfo });
                 }
                 ResetClassInfoGrid();
+
+                UpdateChart(chart1);
             }
         }
 
